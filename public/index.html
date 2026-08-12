@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resume Mailer</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #16181d; --muted: #6b7280;
+    --line: #e3e6ea; --accent: #1d4ed8; --ok: #047857; --warn: #b45309; --err: #b91c1c;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1115; --panel:#171a21; --ink:#e7e9ee; --muted:#9aa3b2;
+            --line:#262b35; --accent:#7ea2ff; --ok:#34d399; --warn:#fbbf24; --err:#f87171; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  header { padding:18px 24px; border-bottom:1px solid var(--line); background:var(--panel);
+           display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
+  h1 { font-size:17px; margin:0; letter-spacing:-.01em; }
+  .status { font-size:12px; color:var(--muted); }
+  .dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:5px; vertical-align:middle; }
+  main { display:grid; grid-template-columns: 1fr 1fr; gap:18px; padding:18px 24px 40px; max-width:1500px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  section { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin:0 0 10px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+  textarea, input[type=text], select {
+    width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px;
+    background:var(--bg); color:var(--ink); font:inherit; }
+  textarea { resize:vertical; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; }
+  button { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid var(--line);
+           background:var(--panel); color:var(--ink); cursor:pointer; }
+  button:hover:not(:disabled) { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  button.danger { border-color:var(--err); color:var(--err); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .pill { font-size:11.5px; padding:2px 8px; border-radius:999px; border:1px solid var(--line); color:var(--muted); }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+  .scroll { max-height:300px; overflow:auto; }
+  .muted { color:var(--muted); }
+  .ok { color:var(--ok); } .warn { color:var(--warn); } .err { color:var(--err); }
+  .preview { border:1px solid var(--line); border-radius:8px; padding:12px; margin-top:10px; background:var(--bg); }
+  .preview pre { white-space:pre-wrap; word-wrap:break-word; margin:8px 0 0; font-size:12.5px;
+                 font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  .subject { font-weight:600; font-size:13px; }
+  .log { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px;
+         max-height:260px; overflow:auto; background:var(--bg); border-radius:8px; padding:10px; }
+  .checks { display:flex; flex-direction:column; gap:6px; margin-top:6px; }
+  .checks label { margin:0; color:var(--ink); font-size:13px; display:flex; gap:8px; align-items:center; }
+  details summary { cursor:pointer; color:var(--muted); font-size:12px; }
+  .hint { font-size:11.5px; color:var(--muted); margin-top:4px; }
+  .banner { padding:10px 12px; border-radius:8px; margin-bottom:12px; font-size:13px; }
+  .banner.dry { background:color-mix(in srgb, var(--warn) 12%, transparent); border:1px solid var(--warn); }
+  .banner.live { background:color-mix(in srgb, var(--err) 12%, transparent); border:1px solid var(--err); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Resume Mailer</h1>
+  <span class="status" id="smtpStatus"><span class="dot" style="background:var(--muted)"></span>checking…</span>
+  <span class="status" id="quota"></span>
+  <button id="verifyBtn" style="margin-left:auto">Test SMTP</button>
+</header>
+
+<main>
+  <section>
+    <h2>1 &middot; Recipients</h2>
+    <label for="rawList">Paste addresses — comma, space or newline separated</label>
+    <textarea id="rawList" rows="7" placeholder="jane@acme.com, careers@globex.com hr@initech.com
+
+Or one per line with details:
+jane@acme.com | Acme Corp | Jane Doe | Senior Backend Engineer
+
+Or paste a CSV with a header row:
+email,company,manager,role"></textarea>
+    <div class="checks">
+      <label><input type="checkbox" id="inferManager"> Guess hiring manager from mailbox (jane.doe@ → Jane Doe)</label>
+    </div>
+    <div class="row">
+      <button id="parseBtn">Parse list</button>
+      <span id="parseSummary" class="muted"></span>
+    </div>
+    <div class="scroll" id="recipientTable" style="margin-top:10px"></div>
+  </section>
+
+  <section>
+    <h2>2 &middot; Message</h2>
+    <label for="subject">Subject</label>
+    <input type="text" id="subject" value="{{my_name}} — {{#if role}}{{role}} application{{else}}Senior Software Engineer, 17 years{{/if}}">
+    <label for="body">Body</label>
+    <textarea id="body" rows="16"></textarea>
+    <details style="margin-top:8px">
+      <summary>Available merge fields</summary>
+      <p class="hint">
+        <code>{{greeting}}</code> — “Dear Jane” or “Dear Hiring Team” &middot;
+        <code>{{company}}</code> &middot; <code>{{hiring_manager}}</code> &middot;
+        <code>{{first_name}}</code> &middot; <code>{{role}}</code> &middot; <code>{{notes}}</code> &middot;
+        <code>{{my_name}}</code> <code>{{my_email}}</code> <code>{{my_phone}}</code>
+        <code>{{my_linkedin}}</code> <code>{{my_github}}</code><br>
+        Conditionals: <code>{{#if hiring_manager}}…{{else}}…{{/if}}</code>
+      </p>
+    </details>
+    <div class="row">
+      <select id="templateSelect"><option value="">— saved templates —</option></select>
+      <button id="saveTplBtn">Save as…</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>3 &middot; Attachments</h2>
+    <div id="attachList" class="checks"></div>
+    <p class="hint">Drop files into <code>attachments/</code> and refresh to see them here.</p>
+  </section>
+
+  <section>
+    <h2>4 &middot; Send</h2>
+    <div id="modeBanner" class="banner dry">Dry run — messages are rendered and logged, but nothing is delivered.</div>
+    <div class="checks">
+      <label><input type="checkbox" id="dryRun" checked> Dry run</label>
+      <label><input type="checkbox" id="allowResend"> Allow re-contacting addresses already in the send log</label>
+    </div>
+    <div class="grid2" style="margin-top:10px">
+      <div><label for="batchCap">Max this run</label><input type="text" id="batchCap" value="25"></div>
+      <div><label for="delayMs">Gap between sends (ms)</label><input type="text" id="delayMs" value="8000"></div>
+    </div>
+    <div class="row">
+      <button id="previewBtn">Preview first 5</button>
+      <button id="sendBtn" class="primary">Start dry run</button>
+    </div>
+    <div id="progress" class="log" style="display:none"></div>
+    <div id="previews"></div>
+  </section>
+
+  <section style="grid-column:1/-1">
+    <h2>History &amp; suppression</h2>
+    <div class="row">
+      <button id="historyBtn">Load history</button>
+      <input type="text" id="suppressEmail" placeholder="address to never contact" style="max-width:280px">
+      <button id="suppressBtn">Suppress</button>
+    </div>
+    <div class="scroll" id="historyTable" style="margin-top:10px"></div>
+  </section>
+</main>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const api = async (url, opts = {}) => {
+  const res = await fetch(url, {
+    headers: { 'content-type': 'application/json' },
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+};
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+
+let recipients = [];
+let cfg = {};
+
+const DEFAULT_BODY = `{{greeting}},
+
+I'm writing to introduce myself for {{#if role}}the {{role}} role at {{company}}{{else}}software engineering roles at {{company}}{{/if}}.
+
+I'm a software engineer with 17+ years building enterprise systems, most recently as Lead Programmer Analyst at eGov Jamaica Ltd, where I led development of large-scale Java applications for government services. My work spans the full lifecycle — analysis, architecture, database design, delivery and CI/CD — and I spent seven of those years leading and mentoring a development team.
+
+A few things that may be relevant to {{company}}:
+
+- Enterprise Java at scale, from requirements analysis through production support
+- Database design and performance tuning across PostgreSQL, MySQL, MSSQL and Informix
+- Full-stack delivery with Node.js, React, TypeScript and Angular
+- Hands-on with modern AI coding agents and MCP tooling
+
+My CV is attached. I'd welcome a short conversation if you think there's a fit.
+
+Best regards,
+{{my_name}}
+{{my_email}} | {{my_phone}}
+{{my_linkedin}}`;
+
+async function loadConfig() {
+  cfg = await api('/api/config');
+  const el = $('smtpStatus');
+  el.innerHTML = cfg.smtpConfigured
+    ? `<span class="dot" style="background:var(--ok)"></span>SMTP ${esc(cfg.smtpUser)}`
+    : `<span class="dot" style="background:var(--warn)"></span>SMTP not configured — dry run only`;
+
+  $('attachList').innerHTML = cfg.attachments.length
+    ? cfg.attachments.map((a) => `<label><input type="checkbox" value="${esc(a.name)}"
+        ${cfg.defaultAttachments.includes(a.name) ? 'checked' : ''}>
+        ${esc(a.name)} <span class="pill">${(a.size / 1024).toFixed(0)} KB</span></label>`).join('')
+    : '<p class="muted">No files in attachments/ yet.</p>';
+
+  $('batchCap').value = cfg.throttle.batchCap;
+  $('delayMs').value = cfg.throttle.delayMs;
+  await loadTemplates();
+}
+
+async function loadTemplates() {
+  const tpls = await api('/api/templates');
+  const sel = $('templateSelect');
+  sel.innerHTML = '<option value="">— saved templates —</option>' +
+    Object.keys(tpls).map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  sel.onchange = () => {
+    const t = tpls[sel.value];
+    if (t) { $('subject').value = t.subject || ''; $('body').value = t.body || ''; }
+  };
+}
+
+$('parseBtn').onclick = async () => {
+  const data = await api('/api/parse', {
+    method: 'POST',
+    body: { raw: $('rawList').value, inferManagerFromMailbox: $('inferManager').checked,
+            campaign: { allowResend: $('allowResend').checked } },
+  });
+  recipients = data.recipients;
+  const skipMap = new Map(data.plan.skipped.map((s) => [s.email, s.reason]));
+
+  const bits = [`<strong>${recipients.length}</strong> address${recipients.length === 1 ? '' : 'es'}`];
+  if (data.duplicates.length) bits.push(`${data.duplicates.length} duplicate removed`);
+  if (data.errors.length) bits.push(`<span class="err">${data.errors.length} invalid</span>`);
+  if (data.plan.skipped.length) bits.push(`<span class="warn">${data.plan.skipped.length} will be skipped</span>`);
+  $('parseSummary').innerHTML = bits.join(' &middot; ');
+  $('quota').textContent = `${data.plan.sentToday}/${data.plan.dailyCap} sent in last 24h`;
+
+  $('recipientTable').innerHTML = `<table>
+    <thead><tr><th>Email</th><th>Company</th><th>Hiring manager</th><th>Role</th><th></th></tr></thead>
+    <tbody>${recipients.map((r) => {
+      const skip = skipMap.get(r.email);
+      return `<tr>
+        <td>${esc(r.email)}</td>
+        <td>${r.company ? esc(r.company) : '<span class="muted">—</span>'}</td>
+        <td>${r.hiring_manager ? esc(r.hiring_manager) : '<span class="muted">Hiring Team</span>'}</td>
+        <td>${r.role ? esc(r.role) : '<span class="muted">—</span>'}</td>
+        <td>${skip ? `<span class="warn">${esc(skip)}</span>` : '<span class="ok">queued</span>'}</td>
+      </tr>`;
+    }).join('')}</tbody></table>` +
+    (data.errors.length ? `<p class="err" style="font-size:12px">Unparsed: ${data.errors.map((e) => esc(e.value)).join(', ')}</p>` : '');
+};
+
+$('previewBtn').onclick = async () => {
+  if (!recipients.length) return alert('Parse a recipient list first.');
+  const { previews } = await api('/api/preview', {
+    method: 'POST',
+    body: { recipients, subject: $('subject').value, body: $('body').value, limit: 5 },
+  });
+  $('previews').innerHTML = previews.map((p) => p.ok
+    ? `<div class="preview"><div class="muted">to ${esc(p.email)}</div>
+         <div class="subject">${esc(p.subject)}</div><pre>${esc(p.text)}</pre></div>`
+    : `<div class="preview"><div class="muted">to ${esc(p.email)}</div>
+         <div class="err">${esc(p.error)}</div></div>`).join('');
+};
+
+function selectedAttachments() {
+  return [...document.querySelectorAll('#attachList input:checked')].map((i) => i.value);
+}
+
+$('dryRun').onchange = () => {
+  const dry = $('dryRun').checked;
+  $('modeBanner').className = `banner ${dry ? 'dry' : 'live'}`;
+  $('modeBanner').textContent = dry
+    ? 'Dry run — messages are rendered and logged, but nothing is delivered.'
+    : 'LIVE — messages will be delivered and cannot be recalled.';
+  $('sendBtn').textContent = dry ? 'Start dry run' : 'Send for real';
+};
+
+$('sendBtn').onclick = async () => {
+  if (!recipients.length) return alert('Parse a recipient list first.');
+  const dry = $('dryRun').checked;
+  const atts = selectedAttachments();
+
+  if (!dry) {
+    const n = Math.min(recipients.length, Number($('batchCap').value) || 25);
+    const msg = `Send up to ${n} real email${n === 1 ? '' : 's'} now?` +
+      (atts.length ? `\n\nAttaching: ${atts.join(', ')}` : '\n\nNo attachment selected.') +
+      '\n\nThis cannot be undone.';
+    if (!confirm(msg)) return;
+  }
+
+  $('sendBtn').disabled = true;
+  const log = $('progress');
+  log.style.display = 'block';
+  log.textContent = '';
+
+  const { id } = await api('/api/send', {
+    method: 'POST',
+    body: {
+      recipients, subject: $('subject').value, body: $('body').value,
+      attachments: atts, dryRun: dry, allowResend: $('allowResend').checked,
+      batchCap: Number($('batchCap').value) || undefined,
+      delayMs: Number($('delayMs').value) || undefined,
+    },
+  });
+
+  let since = 0;
+  const tick = setInterval(async () => {
+    const job = await api(`/api/jobs/${id}?since=${since}`);
+    since += job.events.length;
+    for (const ev of job.events) {
+      if (ev.type === 'start') log.textContent += `queued ${ev.total}, skipping ${ev.skipped}${ev.dryRun ? ' (dry run)' : ''}\n`;
+      if (ev.type === 'sent') log.textContent += `  ✓ ${ev.email} — ${ev.subject}\n`;
+      if (ev.type === 'failed') log.textContent += `  ✗ ${ev.email} — ${ev.error}\n`;
+      if (ev.type === 'waiting') log.textContent += `    …${(ev.ms / 1000).toFixed(1)}s\n`;
+      if (ev.type === 'done') log.textContent += `\ndone — sent ${ev.sent}, dry-run ${ev.dryRun}, failed ${ev.failed}, skipped ${ev.skipped.length}\n`;
+      log.scrollTop = log.scrollHeight;
+    }
+    if (job.status !== 'running') {
+      clearInterval(tick);
+      $('sendBtn').disabled = false;
+      if (job.error) log.textContent += `\nERROR: ${job.error}\n`;
+    }
+  }, 700);
+};
+
+$('verifyBtn').onclick = async () => {
+  $('verifyBtn').disabled = true;
+  try { alert((await api('/api/verify', { method: 'POST' })).message); }
+  catch (e) { alert(`SMTP check failed:\n\n${e.message}`); }
+  finally { $('verifyBtn').disabled = false; }
+};
+
+$('saveTplBtn').onclick = async () => {
+  const name = prompt('Save this subject + body as:');
+  if (!name) return;
+  await api('/api/templates', { method: 'POST', body: { name, subject: $('subject').value, body: $('body').value } });
+  await loadTemplates();
+};
+
+$('historyBtn').onclick = async () => {
+  const h = await api('/api/history');
+  const sup = await api('/api/suppression');
+  $('historyTable').innerHTML = `
+    <p class="muted">${h.total} logged &middot; ${h.last24h} in the last 24h &middot; ${sup.length} suppressed</p>
+    <table><thead><tr><th>When</th><th>Email</th><th>Company</th><th>Status</th><th>Subject</th></tr></thead>
+    <tbody>${h.sent.map((e) => `<tr>
+      <td class="muted">${new Date(e.at).toLocaleString()}</td>
+      <td>${esc(e.email)}</td><td>${esc(e.company || '')}</td>
+      <td class="${e.status === 'sent' ? 'ok' : e.status === 'failed' ? 'err' : 'muted'}">${esc(e.status)}</td>
+      <td>${esc(e.subject || '')}${e.error ? `<br><span class="err">${esc(e.error)}</span>` : ''}</td>
+    </tr>`).join('')}</tbody></table>`;
+};
+
+$('suppressBtn').onclick = async () => {
+  const email = $('suppressEmail').value.trim();
+  if (!email) return;
+  await api('/api/suppression', { method: 'POST', body: { email, reason: 'manual' } });
+  $('suppressEmail').value = '';
+  $('historyBtn').click();
+};
+
+$('body').value = DEFAULT_BODY;
+loadConfig().catch((e) => alert(e.message));
+</script>
+</body>
+</html>
