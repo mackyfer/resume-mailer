@@ -1,7 +1,18 @@
 /** Environment-backed settings. Credentials live in .env and are never sent to the browser. */
 
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/**
+ * Anchor everything to the project root rather than process.cwd(), so that
+ * `node src/server.js`, `node server.js` from inside src/, and a call from any
+ * other directory all behave identically. Bare `import 'dotenv/config'` reads
+ * ./.env relative to the cwd, which silently yields an unconfigured app.
+ */
+export const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+dotenv.config({ path: path.join(projectRoot, '.env') });
 
 const bool = (v, dflt = false) => (v === undefined ? dflt : /^(1|true|yes|on)$/i.test(String(v)));
 const num = (v, dflt) => (v === undefined || v === '' ? dflt : Number(v));
@@ -33,7 +44,7 @@ export const config = {
     batchCap: num(process.env.BATCH_CAP, 25),
   },
 
-  attachmentsDir: path.resolve(process.env.ATTACHMENTS_DIR || 'attachments'),
+  attachmentsDir: path.resolve(projectRoot, process.env.ATTACHMENTS_DIR || 'attachments'),
   defaultAttachments: (process.env.DEFAULT_ATTACHMENTS || '')
     .split(',').map((s) => s.trim()).filter(Boolean),
 

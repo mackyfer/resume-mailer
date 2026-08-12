@@ -2,9 +2,10 @@
 
 import express from 'express';
 import path from 'node:path';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { config, publicConfig, smtpConfigured } from './lib/config.js';
+import { config, projectRoot, publicConfig, smtpConfigured } from './lib/config.js';
 import { parseRecipients } from './lib/recipients.js';
 import { composeMessage, listAttachments, planCampaign, sendCampaign, verifyTransport } from './lib/mailer.js';
 import * as store from './lib/store.js';
@@ -108,9 +109,18 @@ app.delete('/api/templates/:name', wrap(async (req, res) => {
 }));
 
 app.listen(config.port, '127.0.0.1', () => {
-  console.log(`\n  Resume Mailer  ->  http://127.0.0.1:${config.port}\n`);
-  if (!smtpConfigured()) {
-    console.log('  SMTP not configured yet. Copy .env.example to .env and fill it in.');
-    console.log('  Dry-run previews work without it.\n');
+  const envPath = path.join(projectRoot, '.env');
+  const envFound = existsSync(envPath);
+
+  console.log(`\n  Resume Mailer  ->  http://127.0.0.1:${config.port}`);
+  console.log(`  env    ${envFound ? 'loaded' : 'MISSING'}  ${envPath}`);
+  console.log(`  smtp   ${smtpConfigured() ? `ready (${config.smtp.user})` : 'not configured'}`);
+  console.log(`  files  ${config.attachmentsDir}\n`);
+
+  if (!envFound) {
+    console.log('  No .env at the path above. Copy .env.example to .env in the project root.\n');
+  } else if (!smtpConfigured()) {
+    console.log('  .env found but SMTP_HOST/SMTP_USER/SMTP_PASS are incomplete.');
+    console.log('  Dry-run previews still work.\n');
   }
 });

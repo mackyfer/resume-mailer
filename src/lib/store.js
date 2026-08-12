@@ -9,9 +9,12 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-const DATA_DIR = process.env.DATA_DIR
-  ? path.resolve(process.env.DATA_DIR)
-  : path.resolve(process.cwd(), 'data');
+import { projectRoot } from './config.js';
+
+// Anchored to the project root, not the cwd: the send log and suppression list
+// must be the same files no matter which directory the app was launched from.
+// Splitting them per-cwd would silently defeat the duplicate-contact guard.
+const DATA_DIR = path.resolve(projectRoot, process.env.DATA_DIR || 'data');
 
 const FILES = {
   sent: path.join(DATA_DIR, 'sent.json'),
